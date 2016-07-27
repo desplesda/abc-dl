@@ -89,7 +89,7 @@ def main():
     
     parser.add_option("--log", action="store", default="log.txt", help="The log file.")
     
-    
+    parser.add_option("-s", "--slowdown-factor", default=0.5, type=float, help="The time (in seconds) between requests when throttling.")
     
     
     (options, args) = parser.parse_args()
@@ -136,7 +136,7 @@ def main():
         now = datetime.now()
         
         if now < stop_delaying_at:
-            time.sleep(1)
+            time.sleep(options.slowdown_factor)
         
         url = URL_TEMPLATE.format(article_id)
         
