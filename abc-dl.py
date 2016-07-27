@@ -162,10 +162,10 @@ def main():
                     filename = "{}_{}.json".format(result.json()["docType"], article_id)
             
                     output_path = os.path.join(options.output_dir, filename)
+                    
+                    with open(output_path, 'wb') as fd:
+                        fd.write(result.content)
             
-                    outfile = open(output_path, 'w')
-            
-                    outfile.write(result.text.encode('ascii', 'replace'))
                     logging.info("Successfully retrieved {}".format(url))
             
                     if options.index_file:
