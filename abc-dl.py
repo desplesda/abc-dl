@@ -24,60 +24,71 @@
 
 import requests
 import os
-from progressbar import ProgressBar
-from progressbar.widgets import Bar, Percentage, ETA, SimpleProgress, Timer
+
+try:
+    from progressbar import ProgressBar
+    from progressbar.widgets import Bar, Percentage, ETA, SimpleProgress, Timer
+    progressbar_available = True
+except: 
+    progressbar_available = False
+
 from optparse import OptionParser
 import logging
 from datetime import datetime, timedelta
 import time
 
-class AdaptiveETA(Timer):
-    """Widget which attempts to estimate the time of arrival.
-    Uses a weighted average of two estimates:
-      1) ETA based on the total progress and time elapsed so far
-      2) ETA based on the progress as per the last 10 update reports
-    The weight depends on the current progress so that to begin with the
-    total progress is used and at the end only the most recent progress is
-    used.
-    """
+FROM = 6000000
+TO = 7000000
 
-    TIME_SENSITIVE = True
-    NUM_SAMPLES = 10
-
-    def _update_samples(self, currval, elapsed):
-        sample = (currval, elapsed)
-        if not hasattr(self, 'samples'):
-            self.samples = [sample] * (self.NUM_SAMPLES + 1)
-        else:
-            self.samples.append(sample)
-        return self.samples.pop(0)
-
-    def _eta(self, maxval, currval, elapsed):
-        return elapsed * maxval / float(currval) - elapsed
-
-    def update(self, pbar):
-        """Updates the widget to show the ETA or total time when finished."""
-        if pbar.currval == 0:
-            return 'ETA:  --:--:--'
-        elif pbar.finished:
-            return 'Time: %s' % self.format_time(pbar.seconds_elapsed)
-        else:
-            elapsed = pbar.seconds_elapsed
-            currval1, elapsed1 = self._update_samples(pbar.currval, elapsed)
-            eta = self._eta(pbar.maxval, pbar.currval, elapsed)
-            if pbar.currval > currval1:
-                etasamp = self._eta(pbar.maxval - currval1,
-                                    pbar.currval - currval1,
-                                    elapsed - elapsed1)
-                weight = (pbar.currval / float(pbar.maxval)) ** 0.5
-                eta = (1 - weight) * eta + weight * etasamp
-            return 'ETA:  %s' % self.format_time(eta)
+if progressbar_available:
+	class AdaptiveETA(Timer):
+	    """Widget which attempts to estimate the time of arrival.
+	    Uses a weighted average of two estimates:
+	      1) ETA based on the total progress and time elapsed so far
+	      2) ETA based on the progress as per the last 10 update reports
+	    The weight depends on the current progress so that to begin with the
+	    total progress is used and at the end only the most recent progress is
+	    used.
+	    """
+	
+	    TIME_SENSITIVE = True
+	    NUM_SAMPLES = 10
+	
+	    def _update_samples(self, currval, elapsed):
+	        sample = (currval, elapsed)
+	        if not hasattr(self, 'samples'):
+	            self.samples = [sample] * (self.NUM_SAMPLES + 1)
+	        else:
+	            self.samples.append(sample)
+	        return self.samples.pop(0)
+	
+	    def _eta(self, maxval, currval, elapsed):
+	        return elapsed * maxval / float(currval) - elapsed
+	
+	    def update(self, pbar):
+	        """Updates the widget to show the ETA or total time when finished."""
+	        if pbar.currval == 0:
+	            return 'ETA:  --:--:--'
+	        elif pbar.finished:
+	            return 'Time: %s' % self.format_time(pbar.seconds_elapsed)
+	        else:
+	            elapsed = pbar.seconds_elapsed
+	            currval1, elapsed1 = self._update_samples(pbar.currval, elapsed)
+	            eta = self._eta(pbar.maxval, pbar.currval, elapsed)
+	            if pbar.currval > currval1:
+	                etasamp = self._eta(pbar.maxval - currval1,
+	                                    pbar.currval - currval1,
+	                                    elapsed - elapsed1)
+	                weight = (pbar.currval / float(pbar.maxval)) ** 0.5
+	                eta = (1 - weight) * eta + weight * etasamp
+	            return 'ETA:  %s' % self.format_time(eta)
 
 URL_TEMPLATE = "https://content-api-govhack.abc-prod.net.au/v1/{}"
 
-SKIP_IDS = []
-
 def main():
+    
+    global FROM
+    global TO
     
     # parse command line options
     parser = OptionParser()
@@ -95,8 +106,10 @@ def main():
     (options, args) = parser.parse_args()
     
     if len(args) < 2:
-        print("Usage: abc-dl.py <from id> <to id>\n\tFor more information, run abc-dl.py --help")
-        return
+        print("Defaulting to the range {} to {}. For help, see --help.".format(FROM, TO))
+    else:
+        FROM=int(args[0])
+        TO=int(args[1])
     
     # set up the logger
     logging.basicConfig(format='%(asctime)s %(message)s', filename=options.log, level=logging.INFO)
@@ -107,7 +120,7 @@ def main():
         logging.info("Creating output directory {}".format(options.output_dir))
     
     # we'll be requesting stuff within this range
-    id_range = range(int(args[0]), int(args[1]))
+    id_range = range(FROM, TO)
     
     # we'll skip all requests whose ID is in this list
     SKIP_IDS = []
@@ -130,7 +143,8 @@ def main():
     SKIP_IDS = set(SKIP_IDS)
     
     # show a pretty progress bar
-    pbar = ProgressBar(widgets=[AdaptiveETA(), Percentage(), Bar(), SimpleProgress()], maxval=len(id_range)).start()
+    if progressbar_available:
+        pbar = ProgressBar(widgets=[AdaptiveETA(), Percentage(), Bar(), SimpleProgress()], maxval=len(id_range)).start()
     
     # this var contains the time after which we'll resume normal speed; 
     # it starts in the past
@@ -157,7 +171,11 @@ def main():
         result = requests.get(url)
         
         # update the progress bar
-        pbar.update(i)
+        if progressbar_available:
+            pbar.update(i)
+        elif i % 50 == 0:
+        		# a more primitive progressbar
+        		print("{}/{}".format(i, len(id_range)))
         
         # did the server tell us to slow down?
         if result.status_code == requests.codes.too_many_requests:
@@ -212,7 +230,8 @@ def main():
                 skip_file.write("{}\n".format(article_id))
 
     # all done!
-    pbar.finish()
+    if progressbar_available:
+        pbar.finish()
     
     logging.info("Process complete!")
 
