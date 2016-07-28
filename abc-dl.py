@@ -130,6 +130,10 @@ def main():
     
     for i, article_id in enumerate(id_range):
         
+        # skip odd-numbered IDs, which are always folders
+        if article_id % 2 != 0:
+            continue
+        
         if article_id in SKIP_IDS:
             continue
             
