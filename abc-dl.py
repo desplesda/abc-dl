@@ -24,12 +24,21 @@
 
 import requests
 import os
-from progressbar import ProgressBar
-from progressbar.widgets import Bar, Percentage, ETA, SimpleProgress, Timer
+
+try:
+    from progressbar import ProgressBar
+    from progressbar.widgets import Bar, Percentage, ETA, SimpleProgress, Timer
+    progressbar_available = True
+except: 
+    progressbar_available = False
+
 from optparse import OptionParser
 import logging
 from datetime import datetime, timedelta
 import time
+
+FROM = 6000000
+TO = 7000000
 
 class AdaptiveETA(Timer):
     """Widget which attempts to estimate the time of arrival.
@@ -75,9 +84,10 @@ class AdaptiveETA(Timer):
 
 URL_TEMPLATE = "https://content-api-govhack.abc-prod.net.au/v1/{}"
 
-SKIP_IDS = []
-
 def main():
+    
+    global FROM
+    global TO
     
     # parse command line options
     parser = OptionParser()
@@ -95,8 +105,10 @@ def main():
     (options, args) = parser.parse_args()
     
     if len(args) < 2:
-        print("Usage: abc-dl.py <from id> <to id>\n\tFor more information, run abc-dl.py --help")
-        return
+        print("Defaulting to the range {} to {}. For help, see --help.".format(FROM, TO))
+    else:
+        FROM=int(args[0])
+        TO=int(args[1])
     
     # set up the logger
     logging.basicConfig(format='%(asctime)s %(message)s', filename=options.log, level=logging.INFO)
@@ -107,7 +119,7 @@ def main():
         logging.info("Creating output directory {}".format(options.output_dir))
     
     # we'll be requesting stuff within this range
-    id_range = range(int(args[0]), int(args[1]))
+    id_range = range(FROM, TO)
     
     # we'll skip all requests whose ID is in this list
     SKIP_IDS = []
@@ -130,7 +142,8 @@ def main():
     SKIP_IDS = set(SKIP_IDS)
     
     # show a pretty progress bar
-    pbar = ProgressBar(widgets=[AdaptiveETA(), Percentage(), Bar(), SimpleProgress()], maxval=len(id_range)).start()
+    if progressbar_available:
+        pbar = ProgressBar(widgets=[AdaptiveETA(), Percentage(), Bar(), SimpleProgress()], maxval=len(id_range)).start()
     
     # this var contains the time after which we'll resume normal speed; 
     # it starts in the past
@@ -157,7 +170,8 @@ def main():
         result = requests.get(url)
         
         # update the progress bar
-        pbar.update(i)
+        if progressbar_available:
+            pbar.update(i)
         
         # did the server tell us to slow down?
         if result.status_code == requests.codes.too_many_requests:
@@ -212,7 +226,8 @@ def main():
                 skip_file.write("{}\n".format(article_id))
 
     # all done!
-    pbar.finish()
+    if progressbar_available:
+        pbar.finish()
     
     logging.info("Process complete!")
 
